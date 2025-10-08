@@ -1,0 +1,19 @@
+.idea/
+node_modules/
+react/node_modules/
+react/dist/
+react/build/
+react/.env
+react/.env.local
+react/.env.*.local
+springBoot/target/
+*.log
+*.tmp
+.DS_Store
+*.iml
+.vscode/
+.env
+# OS files
+Thumbs.db
+desktop.ini
+
