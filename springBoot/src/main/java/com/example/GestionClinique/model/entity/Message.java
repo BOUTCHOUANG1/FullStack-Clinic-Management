@@ -4,17 +4,21 @@ import com.example.GestionClinique.model.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @EqualsAndHashCode(callSuper = true)
 @Entity
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-@Table(name = "messages")
+@Table
 public class Message extends BaseEntity {
-    @Column(name = "contenu", nullable = false, columnDefinition = "TEXT")
+
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String contenu;
 
-    @Column(name = "lu", nullable = false)
+    @Column(nullable = false)
     private boolean lu;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -24,4 +28,7 @@ public class Message extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "expediteur_id", nullable = false)
     private Utilisateur expediteur;
+
+    @OneToMany(mappedBy = "message", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Notification> notifications = new ArrayList<>();
 }

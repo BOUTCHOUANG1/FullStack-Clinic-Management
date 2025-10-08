@@ -1,10 +1,8 @@
 package com.example.GestionClinique.service.serviceImpl;
 
-
 import com.example.GestionClinique.model.entity.enumElem.StatutRDV;
 import com.example.GestionClinique.model.entity.Consultation;
 import com.example.GestionClinique.model.entity.Facture;
-import com.example.GestionClinique.model.entity.Patient; // Need to import Patient entity
 import com.example.GestionClinique.model.entity.RendezVous;
 import com.example.GestionClinique.model.entity.enumElem.ModePaiement;
 import com.example.GestionClinique.model.entity.enumElem.StatutPaiement;
@@ -13,26 +11,27 @@ import com.example.GestionClinique.repository.RendezVousRepository;
 import com.example.GestionClinique.repository.FactureRepository;
 import com.example.GestionClinique.service.FactureService;
 import com.example.GestionClinique.service.HistoriqueActionService;
+import com.example.GestionClinique.service.StatService;
 import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
 import static com.example.GestionClinique.model.entity.enumElem.StatutPaiement.PAYEE;
-
 
 @Service
 @AllArgsConstructor
 public class FactureServiceImpl implements FactureService {
 
     private final FactureRepository factureRepository;
-    private final RendezVousRepository rendezVousRepository; // To fetch rendezVous
+    private final RendezVousRepository rendezVousRepository;
     private final ConsultationRepository consultationRepository;
     private final LoggingAspect loggingAspect;
     private final HistoriqueActionService historiqueActionService;
-
+    private final StatService statService;
 
     public void generateInvoiceForRendesVous(Long rendezVousId) {
         RendezVous rendezVous = rendezVousRepository.findById(rendezVousId)
@@ -61,12 +60,15 @@ public class FactureServiceImpl implements FactureService {
         rendezVous.setFacture(savedFacture);
         rendezVousRepository.save(rendezVous);
 
+        statService.refreshStatDuJour(LocalDate.now());
+        statService.refreshStatParMois(LocalDate.now().getMonthValue());
+        statService.refreshStatsSurLannee(LocalDate.now().getYear());
+
         historiqueActionService.enregistrerAction(
                 String.format("Génération facture ID: %d pour rendez-vous ID: %d",
                         savedFacture.getId(), rendezVousId),
                 loggingAspect.currentUserId()
         );
-
     }
 
     @Override
@@ -85,7 +87,7 @@ public class FactureServiceImpl implements FactureService {
             facture.setPatient(consultation.getDossierMedical().getPatient());
         } else {
             System.out.println("Warning: Creating invoice for consultation ID " + consultationId + " without an associated patient.");
-            facture.setPatient(null); // Explicitly set to null if no patient
+            facture.setPatient(null);
         }
 
         facture.setDateEmission(LocalDateTime.now());
@@ -98,36 +100,15 @@ public class FactureServiceImpl implements FactureService {
         consultation.setFacture(savedFacture);
         consultationRepository.save(consultation);
 
+        statService.refreshStatDuJour(LocalDate.now());
+        statService.refreshStatParMois(LocalDate.now().getMonthValue());
+        statService.refreshStatsSurLannee(LocalDate.now().getYear());
+
         historiqueActionService.enregistrerAction(
                 String.format("Génération facture ID: %d pour rendez-vous ID: %d",
                         savedFacture.getId(), consultationId),
                 loggingAspect.currentUserId()
         );
-    }
-
-
-    @Override
-    public Facture updateFacture(Long id, Facture factureDetails) {
-        Facture existingFacture = factureRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Facture not found with ID: " + id));
-
-        existingFacture.setMontant(factureDetails.getMontant());
-        existingFacture.setDateEmission(factureDetails.getDateEmission());
-        existingFacture.setStatutPaiement(factureDetails.getStatutPaiement());
-        existingFacture.setModePaiement(factureDetails.getModePaiement());
-
-        historiqueActionService.enregistrerAction(
-                String.format("Mise à jour facture ID: %d", id),
-                loggingAspect.currentUserId()
-        );
-
-        return factureRepository.save(existingFacture);
-    }
-
-    @Override
-    @Transactional
-    public List<Facture> findAllFactures() {
-        return factureRepository.findAll();
     }
 
     @Override
@@ -138,11 +119,6 @@ public class FactureServiceImpl implements FactureService {
 
     @Override
     @Transactional
-    public List<Facture> findFacturesByModePaiement(ModePaiement modePaiement) {
-        return factureRepository.findByModePaiement(modePaiement);
-    }
-
-    @Override
     public List<Facture> findAllFacturesIMPAYE() {
         return findFacturesByStatut(StatutPaiement.IMPAYEE);
     }
@@ -159,7 +135,6 @@ public class FactureServiceImpl implements FactureService {
     public void deleteFacture(Long id) {
         Facture facture = factureRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Facture not found with ID: " + id));
-        // Disassociate facture from rendezVous before deleting (bi-directional link)
         if (facture.getRendezVous() != null) {
             RendezVous rendezVous = facture.getRendezVous();
             rendezVous.setFacture(null);
@@ -173,27 +148,6 @@ public class FactureServiceImpl implements FactureService {
 
         factureRepository.delete(facture);
     }
-
-    @Override
-    @Transactional
-    public Patient findPatientByFactureId(Long id) {
-        Facture facture = findById(id);
-        // Ensure patient is not null before returning if the Facture entity allows null patients
-        if (facture.getPatient() == null) {
-            throw new IllegalStateException("Facture with ID: " + id + " does not have an associated patient.");
-        }
-        return facture.getPatient();
-    }
-
-//    @Override
-//    public Facture updateStatutPaiement(Long factureId, StatutPaiement nouveauStatut) {
-//        Facture facture = factureRepository.findById(factureId)
-//                .orElseThrow(() -> new IllegalArgumentException("Facture not found with ID: " + factureId));
-//        facture.setStatutPaiement(nouveauStatut);
-//        return factureRepository.save(facture);
-//    }
-
-
 
     @Override
     public Facture payerFacture(Long factureId, ModePaiement modePaiement) {
@@ -215,21 +169,16 @@ public class FactureServiceImpl implements FactureService {
             rendezVousRepository.save(rendezVous);
         }
 
+        statService.refreshStatDuJour(LocalDate.now());
+        statService.refreshStatParMois(LocalDate.now().getMonthValue());
+        statService.refreshStatsSurLannee(LocalDate.now().getYear());
+
         historiqueActionService.enregistrerAction(
                 String.format("Paiement facture ID: %d via %s",
                         factureId, modePaiement.toString()),
                 loggingAspect.currentUserId()
         );
-
         return facture;
     }
-
-
-    // FactureServiceImpl.java (within generateFacturePdf method)
-
-
-
-
-
 }
 
