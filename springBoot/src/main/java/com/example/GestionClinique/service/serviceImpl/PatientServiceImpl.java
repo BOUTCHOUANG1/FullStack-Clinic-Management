@@ -2,12 +2,11 @@ package com.example.GestionClinique.service.serviceImpl;
 
 import com.example.GestionClinique.model.entity.DossierMedical;
 import com.example.GestionClinique.model.entity.Patient;
-import com.example.GestionClinique.model.entity.RendezVous;
-import com.example.GestionClinique.model.entity.enumElem.StatutRDV;
 import com.example.GestionClinique.repository.PatientRepository;
 import com.example.GestionClinique.repository.RendezVousRepository;
 import com.example.GestionClinique.service.HistoriqueActionService;
 import com.example.GestionClinique.service.PatientService;
+import com.example.GestionClinique.service.StatService;
 import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -24,7 +23,7 @@ public class PatientServiceImpl implements PatientService {
     private final RendezVousRepository rendezVousRepository;
     private final HistoriqueActionService historiqueActionService;
     private final LoggingAspect loggingAspect;
-
+    private final StatService statService;
 
     @Transactional
     @Override
@@ -38,11 +37,11 @@ public class PatientServiceImpl implements PatientService {
         patient.setAge((long) Period.between(patient.getDateNaissance(), LocalDate.now()).getYears());
         Patient savedPatient = patientRepository.save(patient);
 
-        historiqueActionService.enregistrerAction(
-                String.format("Création patient ID: %d - %s %s",
-                        savedPatient.getId(), savedPatient.getNom(), savedPatient.getPrenom()),
-                loggingAspect.currentUserId()
-        );
+        historiqueActionService.enregistrerAction(String.format("Création patient ID: %d - %s %s", savedPatient.getId(), savedPatient.getNom(), savedPatient.getPrenom()), loggingAspect.currentUserId());
+
+        statService.refreshStatDuJour(LocalDate.now());
+        statService.refreshStatParMois(LocalDate.now().getMonthValue());
+        statService.refreshStatsSurLannee(LocalDate.now().getYear());
 
         return savedPatient;
     }
@@ -50,8 +49,7 @@ public class PatientServiceImpl implements PatientService {
     @Transactional
     @Override
     public Patient updatePatient(Long id, Patient patientDetails) {
-        Patient existingPatient = patientRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Patient non trouvé avec ID: " + id));
+        Patient existingPatient = patientRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("Patient non trouvé avec ID: " + id));
 
         if (patientDetails.getEmail() != null && !patientDetails.getEmail().equals(existingPatient.getEmail())) {
             if (patientRepository.findByEmail(patientDetails.getEmail()).isPresent()) {
@@ -66,7 +64,6 @@ public class PatientServiceImpl implements PatientService {
         if (patientDetails.getPrenom() != null) {
             existingPatient.setPrenom(patientDetails.getPrenom());
         }
-        // Ajoutez des conditions pour tous les champs restants
         if (patientDetails.getAdresse() != null) {
             existingPatient.setAdresse(patientDetails.getAdresse());
         }
@@ -80,14 +77,9 @@ public class PatientServiceImpl implements PatientService {
             existingPatient.setGenre(patientDetails.getGenre());
         }
 
-        historiqueActionService.enregistrerAction(
-                String.format("Mise à jour patient ID: %d", id),
-                loggingAspect.currentUserId()
-        );
-
+        historiqueActionService.enregistrerAction(String.format("Mise à jour patient ID: %d", id), loggingAspect.currentUserId());
         return patientRepository.save(existingPatient);
     }
-
 
     @Transactional
     @Override
@@ -98,54 +90,20 @@ public class PatientServiceImpl implements PatientService {
     @Transactional
     @Override
     public Patient findById(Long id) {
-        return patientRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Patient not found with ID: " + id));
+        return patientRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("Patient not found with ID: " + id));
     }
 
     @Transactional
     @Override
     public void deletePatient(Long id) {
-        Patient patient = patientRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Patient not found with ID: " + id));
-
-        historiqueActionService.enregistrerAction(
-                String.format("Suppression patient ID: %d - %s %s",
-                        patient.getId(), patient.getNom(), patient.getPrenom()),
-                loggingAspect.currentUserId()
-        );
-
+        Patient patient = patientRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("Patient not found with ID: " + id));
+        historiqueActionService.enregistrerAction(String.format("Suppression patient ID: %d - %s %s", patient.getId(), patient.getNom(), patient.getPrenom()), loggingAspect.currentUserId());
         patientRepository.delete(patient);
-    }
-
-    @Transactional
-    @Override
-    public List<Patient> searchPatients(String searchTerm) {
-        if (searchTerm == null || searchTerm.trim().length() < 2) {
-            return List.of();
-        }
-        return patientRepository.searchByTerm(searchTerm);
     }
 
     @Transactional
     @Override
     public List<Patient> findPatientByNom(String nom) {
         return patientRepository.findByNom(nom);
-    }
-
-    @Transactional
-    @Override
-    public Patient findPatientByEmail(String email) {
-        return patientRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalArgumentException("Patient not found with email: " + email));
-    }
-
-    @Override
-    public List<RendezVous> findRendezVousByPatientSearchTerm(String patientSearchTerm) {
-        return rendezVousRepository.findRendezVousByPatientSearchTerm(patientSearchTerm);
-    }
-
-    @Override
-    public List<RendezVous> findRendezVousForPatientByStatus(String patientName, StatutRDV statut) {
-        return rendezVousRepository.findRendezVousForPatientByStatus(patientName, statut);
     }
 }

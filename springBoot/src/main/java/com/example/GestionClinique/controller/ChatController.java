@@ -14,6 +14,7 @@ import com.example.GestionClinique.model.entity.Groupe;
 import com.example.GestionClinique.model.entity.Message;
 import com.example.GestionClinique.service.authService.MonUserDetailsCustom;
 import com.example.GestionClinique.service.serviceImpl.ChatService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -28,6 +29,7 @@ import java.util.List;
 
 import static com.example.GestionClinique.configuration.utils.Constants.API_NAME;
 
+@Tag(name = "Gestion du chat", description = "API pour la gestion du chat de la clinique")
 @RestController
 @RequestMapping( API_NAME+"/chat")
 @RequiredArgsConstructor
@@ -45,7 +47,6 @@ public class ChatController {
         }
         throw new IllegalStateException("Authenticated user (Medecin) ID not found in security context or not an Utilisateur instance.");
     }
-
 
     @PreAuthorize("hasAnyRole('ADMIN', 'SECRETAIRE', 'MEDECIN')")
     @PostMapping("/messages")
@@ -79,7 +80,6 @@ public class ChatController {
             @RequestParam(defaultValue = "20") int size,
             Authentication authentication) {
         Long userId = getAuthenticatedUserId();
-        // Assurez-vous que l'utilisateur est bien un participant de la conversation
         if (!chatService.isUserInConversation(conversationId, userId)) {
             return new ResponseEntity<>(HttpStatus.FORBIDDEN);
         }

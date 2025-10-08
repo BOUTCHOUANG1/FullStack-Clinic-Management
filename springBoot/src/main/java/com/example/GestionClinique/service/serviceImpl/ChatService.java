@@ -7,6 +7,7 @@ import com.example.GestionClinique.model.entity.*;
 import com.example.GestionClinique.model.entity.enumElem.Action;
 import com.example.GestionClinique.model.entity.enumElem.TypeConversation;
 import com.example.GestionClinique.repository.*;
+import com.example.GestionClinique.service.NotificationService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -29,6 +30,7 @@ public class ChatService {
     private final HistoriqueMessageRepository historiqueMessageRepository;
     private final GroupeRepository groupeRepository;
     private final UtilisateurRepository utilisateurRepository;
+    private final NotificationService notificationService;
 
     @Transactional
     public Message sendMessage(MessageRequestDto messageDto, Long senderId) {
@@ -46,21 +48,28 @@ public class ChatService {
         message.setContenu(messageDto.getContenu());
         message.setExpediteur(expediteur);
         message.setConversation(conversation);
-        message.setLu(false); // Un message est initialement non lu par les autres
+        message.setLu(false);
 
         Message savedMessage = messageRepository.save(message);
 
-        // Mise à jour de la conversation
         conversation.setLastMessageAt(LocalDateTime.now());
         conversation.setLastMessageSender(expediteur);
         conversationRepository.save(conversation);
 
-        // Mettre à jour les compteurs de messages non lus pour tous les participants, sauf l'expéditeur
         List<ConversationParticipant> participants = conversation.getParticipants();
         for (ConversationParticipant participant : participants) {
             if (!participant.getUtilisateur().getId().equals(expediteur.getId())) {
                 participant.setUnreadCount(participant.getUnreadCount() + 1);
                 conversationParticipantRepository.save(participant);
+            }
+        }
+
+        for (ConversationParticipant participant : participants) {
+            if (!participant.getUtilisateur().getId().equals(expediteur.getId())) {
+                participant.setUnreadCount(participant.getUnreadCount() + 1);
+                conversationParticipantRepository.save(participant);
+
+                notificationService.creerNotificationPourMessage(savedMessage, participant.getUtilisateur());
             }
         }
 
@@ -171,14 +180,12 @@ public class ChatService {
         groupe.getMembres().addAll(membres);
         Groupe savedGroupe = groupeRepository.save(groupe);
 
-        // Crée une conversation associée au groupe
         Conversation conversation = new Conversation();
         conversation.setTypeConversation(TypeConversation.GROUP);
         conversation.setTitre(groupe.getNom());
         conversation.setGroupe(savedGroupe);
         conversationRepository.save(conversation);
 
-        // Ajoute tous les membres du groupe comme participants de la conversation
         for (Utilisateur membre : groupe.getMembres()) {
             ConversationParticipant cp = new ConversationParticipant();
             cp.setConversation(conversation);
@@ -187,40 +194,6 @@ public class ChatService {
         }
 
         return savedGroupe;
-    }
-
-    @Transactional
-    public Groupe addMemberToGroup(Long groupeId, List<Long> memberIds) {
-        Groupe groupe = groupeRepository.findById(groupeId)
-                .orElseThrow(() -> new EntityNotFoundException("Groupe non trouvé avec l'ID: " + groupeId));
-
-        List<Utilisateur> newMembers = utilisateurRepository.findAllById(memberIds);
-        groupe.getMembres().addAll(newMembers);
-
-        // Ajoute les nouveaux membres à la conversation du groupe
-        Conversation conversation = conversationRepository.findByGroupeId(groupeId)
-                .orElseThrow(() -> new EntityNotFoundException("Conversation associée au groupe non trouvée."));
-
-        for (Utilisateur newMember : newMembers) {
-            Optional<ConversationParticipant> existingParticipant = conversationParticipantRepository.findByConversationIdAndUtilisateurId(conversation.getId(), newMember.getId());
-            if (existingParticipant.isEmpty()) {
-                ConversationParticipant cp = new ConversationParticipant();
-                cp.setConversation(conversation);
-                cp.setUtilisateur(newMember);
-                conversationParticipantRepository.save(cp);
-            }
-        }
-        return groupeRepository.save(groupe);
-    }
-
-    @Transactional
-    public void markConversationAsRead(Long conversationId, Long userId) {
-        ConversationParticipant participant = conversationParticipantRepository.findByConversationIdAndUtilisateurId(conversationId, userId)
-                .orElseThrow(() -> new EntityNotFoundException("Participant non trouvé dans cette conversation."));
-
-        participant.setLastReadAt(LocalDateTime.now());
-        participant.setUnreadCount(0);
-        conversationParticipantRepository.save(participant);
     }
 
     public boolean isUserInConversation(Long conversationId, Long userId) {

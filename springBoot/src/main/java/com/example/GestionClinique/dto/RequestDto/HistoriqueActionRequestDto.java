@@ -6,17 +6,15 @@ import lombok.Data;
 
 import java.time.LocalDate;
 
-
 @Data
-
 public class HistoriqueActionRequestDto {
 
     @NotBlank(message = "L'action ne peut pas être vide.")
     private String action;
 
     @NotNull(message = "La date de l'action est requise.")
-    private LocalDate date; // Added date to request DTO
+    private LocalDate date;
 
     @NotNull(message = "L'ID de l'utilisateur est requis.")
-    private Long utilisateurId; // Renamed to utilisateurId and type Long
+    private Long utilisateurId;
 }
